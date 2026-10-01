@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PAC-MOLE 像素打地鼠</title>
+  <!-- 引入 Arcade 8-bit 像素字體 -->
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Press Start 2P', cursive, monospace;
+      image-rendering: pixelated;
+    }
+
+    body {
+      background-color: #000000;
+      color: #ffffff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    h1 {
+      margin-bottom: 20px;
+      color: #ffff00; /* Pac-Man 黃 */
+      text-shadow: 3px 3px 0px #1919a6;
+      font-size: 1.8rem;
+      text-align: center;
+      letter-spacing: 2px;
+    }
+
+    /* Pac-Man 風格儀表板 */
+    .dashboard {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 15px;
+      margin-bottom: 20px;
+      background: #000000;
+      padding: 15px 20px;
+      border: 4px solid #1919a6; /* Pac-Man 牆壁藍 */
+      box-shadow: 0 0 10px #1919a6;
+      border-radius: 4px;
+    }
+
+    .stat-box {
+      font-size: 0.75rem;
+      color: #2121ff;
+      line-height: 1.5;
+    }
+
+    .stat-box span {
+      color: #ffb8ff; /* 鬼魂粉紅 */
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    button {
+      background-color: #000000;
+      color: #ffff00;
+      border: 3px solid #ffb8ff;
+      padding: 12px 16px;
+      font-size: 0.7rem;
+      font-family: 'Press Start 2P', cursive;
+      cursor: pointer;
+      transition: all 0.1s;
+      box-shadow: 3px 3px 0px #ffb8ff;
+    }
+
+    button:hover:not(:disabled) {
+      background-color: #ffb8ff;
+      color: #000000;
+    }
+
+    button:active:not(:disabled) {
+      transform: translate(2px, 2px);
+      box-shadow: 1px 1px 0px #ffb8ff;
+    }
+
+    button:disabled {
+      border-color: #555555;
+      color: #555555;
+      box-shadow: none;
+      cursor: not-allowed;
+    }
+
+    /* 網格與地鼠洞 */
+    .game-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 110px);
+      grid-template-rows: repeat(3, 110px);
+      gap: 15px;
+      background: #000000;
+      padding: 15px;
+      border: 4px solid #1919a6;
+      box-shadow: inset 0 0 15px #1919a6, 0 0 15px #1919a6;
+    }
+
+    .hole {
+      position: relative;
+      overflow: hidden;
+      background-color: #000000;
+      border: 3px solid #ffb829; /* 橘色邊框 */
+      cursor: pointer;
+      user-select: none;
+    }
+
+    /* 地鼠 (小精靈鬼魂) */
+    .mole {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      transition: top 0.12s steps(4, end); /* 步驟動畫增加像素卡頓感 */
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 2.8rem;
+    }
+
+    .mole::after {
+      content: '👻'; /* 像素風格鬼魂 */
+    }
+
+    /* 地鼠彈出狀態 */
+    .hole.up .mole {
+      top: 0;
+    }
+
+    /* 被擊中狀態 */
+    .hole.hit .mole::after {
+      content: '💥'; /* 被擊中變爆炸效果 */
+    }
+
+    /* 遊戲彈窗 */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0,0,0,0.85);
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+    }
+
+    .modal-content {
+      background: #000000;
+      color: #ffffff;
+      border: 4px solid #ffff00;
+      box-shadow: 0 0 20px #ffff00;
+      padding: 25px;
+      text-align: center;
+      max-width: 360px;
+      width: 90%;
+    }
+
+    .modal-content h2 {
+      margin-bottom: 20px;
+      font-size: 1rem;
+    }
+
+    .modal-content p {
+      margin-bottom: 25px;
+      font-size: 0.7rem;
+      line-height: 1.8;
+      color: #00ffff;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>PAC-MOLE</h1>
+
+  <div class="dashboard">
+    <div class="stat-box">SCORE: <br><span id="score">0</span></div>
+    <div class="stat-box">TIME: <br><span id="time">15</span>s</div>
+    <div class="stat-box">HIGH: <br><span id="high-score">0</span></div>
+  </div>
+
+  <div class="controls">
+    <button id="start-btn">START</button>
+    <button id="pause-btn" disabled>PAUSE</button>
+  </div>
+
+  <div class="game-grid">
+    <div class="hole" data-index="0"><div class="mole"></div></div>
+    <div class="hole" data-index="1"><div class="mole"></div></div>
+    <div class="hole" data-index="2"><div class="mole"></div></div>
+    <div class="hole" data-index="3"><div class="mole"></div></div>
+    <div class="hole" data-index="4"><div class="mole"></div></div>
+    <div class="hole" data-index="5"><div class="mole"></div></div>
+    <div class="hole" data-index="6"><div class="mole"></div></div>
+    <div class="hole" data-index="7"><div class="mole"></div></div>
+    <div class="hole" data-index="8"><div class="mole"></div></div>
+  </div>
+
+  <!-- 結算彈窗 -->
+  <div class="modal" id="result-modal">
+    <div class="modal-content">
+      <h2 id="modal-title">GAME OVER</h2>
+      <p id="modal-message">YOUR SCORE: 0</p>
+      <button id="modal-close-btn">AGAIN</button>
+    </div>
+  </div>
+
+  <script>
+    // 遊戲參數配置
+    const GAME_DURATION = 15; // 遊戲時間 (秒)
+    const TARGET_SCORE = 10;   // 通關目標分數
+
+    // DOM 元素選取
+    const holes = document.querySelectorAll('.hole');
+    const scoreBoard = document.getElementById('score');
+    const timeBoard = document.getElementById('time');
+    const highScoreBoard = document.getElementById('high-score');
+    const startBtn = document.getElementById('start-btn');
+    const pauseBtn = document.getElementById('pause-btn');
+    
+    const resultModal = document.getElementById('result-modal');
+    const modalTitle = document.getElementById('modal-title');
+    const modalMessage = document.getElementById('modal-message');
+    const modalCloseBtn = document.getElementById('modal-close-btn');
+
+    // 遊戲運行狀態
+    let score = 0;
+    let timeRemaining = GAME_DURATION;
+    let isPlaying = false;
+    let isPaused = false;
+    let lastHoleIndex = -1;
+    let countdownTimer = null;
+    let moleTimer = null;
+
+    // 初始化：載入 LocalStorage 最高紀錄
+    function initHighScore() {
+      const savedHighScore = localStorage.getItem('pacmole_highscore') || 0;
+      highScoreBoard.textContent = savedHighScore;
+    }
+
+    // 取得隨機地鼠洞
+    function getRandomHole() {
+      let index;
+      do {
+        index = Math.floor(Math.random() * holes.length);
+      } while (index === lastHoleIndex);
+      lastHoleIndex = index;
+      return holes[index];
+    }
+
+    // 地鼠彈出邏輯
+    function popMole() {
+      if (!isPlaying || isPaused) return;
+
+      const hole = getRandomHole();
+      const stayTime = Math.floor(Math.random() * 600) + 600;
+
+      hole.classList.remove('hit');
+      hole.classList.add('up');
+
+      moleTimer = setTimeout(() => {
+        hole.classList.remove('up');
+        if (isPlaying && !isPaused) {
+          popMole();
+        }
+      }, stayTime);
+    }
+
+    // 點擊打擊邏輯（包含防連點）
+    function whack(e) {
+      if (!isPlaying || isPaused || !e.isTrusted) return;
+
+      const hole = e.currentTarget;
+
+      if (hole.classList.contains('up') && !hole.classList.contains('hit')) {
+        score++;
+        scoreBoard.textContent = score;
+        
+        hole.classList.add('hit');
+        hole.classList.remove('up');
+      }
+    }
+
+    // 開始/重新開始遊戲
+    function startGame() {
+      resetGame();
+
+      isPlaying = true;
+      isPaused = false;
+      score = 0;
+      timeRemaining = GAME_DURATION;
+
+      scoreBoard.textContent = score;
+      timeBoard.textContent = timeRemaining;
+
+      startBtn.disabled = false;
+      startBtn.textContent = 'RESTART';
+      pauseBtn.disabled = false;
+      pauseBtn.textContent = 'PAUSE';
+
+      popMole();
+      startCountdown();
+    }
+
+    // 啟動倒數計時器
+    function startCountdown() {
+      countdownTimer = setInterval(() => {
+        if (!isPaused) {
+          timeRemaining--;
+          timeBoard.textContent = timeRemaining;
+
+          if (timeRemaining <= 0) {
+            endGame();
+          }
+        }
+      }, 1000);
+    }
+
+    // 切換暫停 / 繼續狀態
+    function togglePause() {
+      if (!isPlaying) return;
+
+      if (!isPaused) {
+        // 觸發暫停
+        isPaused = true;
+        clearInterval(countdownTimer);
+        clearTimeout(moleTimer);
+        pauseBtn.textContent = 'RESUME';
+      } else {
+        // 觸發繼續遊戲
+        isPaused = false;
+        pauseBtn.textContent = 'PAUSE';
+        
+        // 恢復地鼠狀態與倒數計時
+        popMole();
+        startCountdown();
+      }
+    }
+
+    // 重置遊戲狀態與定時器
+    function resetGame() {
+      isPlaying = false;
+      isPaused = false;
+      clearInterval(countdownTimer);
+      clearTimeout(moleTimer);
+      
+      holes.forEach(hole => {
+        hole.classList.remove('up', 'hit');
+      });
+    }
+
+    // 遊戲結束處理
+    function endGame() {
+      resetGame();
+      startBtn.textContent = 'START';
+      pauseBtn.disabled = true;
+      pauseBtn.textContent = 'PAUSE';
+
+      const currentHighScore = parseInt(localStorage.getItem('pacmole_highscore') || '0', 10);
+      let isNewRecord = false;
+
+      if (score > currentHighScore) {
+        localStorage.setItem('pacmole_highscore', score);
+        highScoreBoard.textContent = score;
+        isNewRecord = true;
+      }
+
+      showResultModal(isNewRecord);
+    }
+
+    // 顯示結算 Modal
+    function showResultModal(isNewRecord) {
+      const passed = score >= TARGET_SCORE;
+
+      if (passed) {
+        modalTitle.textContent = 'STAGE CLEAR!';
+        modalTitle.style.color = '#00ff00';
+      } else {
+        modalTitle.textContent = 'GAME OVER';
+        modalTitle.style.color = '#ff0000';
+      }
+
+      let msg = `SCORE: ${score}<br>GOAL: ${TARGET_SCORE}<br><br>`;
+      if (isNewRecord) {
+        msg += `<span style="color:#ffff00;">★ NEW HIGH SCORE! ★</span>`;
+      }
+
+      modalMessage.innerHTML = msg;
+      resultModal.style.display = 'flex';
+    }
+
+    // 綁定事件監聽
+    holes.forEach(hole => hole.addEventListener('click', whack));
+    startBtn.addEventListener('click', startGame);
+    pauseBtn.addEventListener('click', togglePause);
+    modalCloseBtn.addEventListener('click', () => {
+      resultModal.style.display = 'none';
+    });
+
+    // 初始化最高分
+    initHighScore();
+  </script>
+</body>
+</html>
